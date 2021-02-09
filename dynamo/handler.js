@@ -18,10 +18,13 @@ const s3 = new AWS.S3();
 (async function() {
   try {
     const tables = await ddb.listTables().promise();
-    console.log(tables.TableNames);
+    console.log(`Tables: ${tables.TableNames}`);
 
-    await createS3Bucket();
-    await putJSONinS3();
+    // await createS3Bucket();
+    // await putJSONinS3();
+    const dataJSON = await downloadData();
+    await writeDynamoDb(dataJSON);
+    await queryDynamoDb();
   } 
   catch (err) {
     console.log(err, err.stack);
@@ -55,5 +58,55 @@ async function putJSONinS3() {
   } 
   catch (err) {
     console.log (err, err.stack);
+  }
+}
+
+async function downloadData() {
+  try {
+    let params = {
+      Bucket: BUCKET_NAME,
+      Key: 'lab-data/test-table-items.json'
+    };
+  
+    let data = await s3.getObject(params).promise();
+    return JSON.parse(data.Body);
+  }
+  catch(err) {
+    console.log(err, err.stack)
+  }
+}
+
+async function writeDynamoDb(data) {
+  try{
+    let params = {
+      RequestItems: data
+    }
+    const response = await ddb.batchWriteItem(params).promise();
+    console.log('Writing to Dynamo... Response:')
+    console.log(response);
+  }
+  catch (err) {
+    console.log(err, err.stack)
+  }
+
+}
+
+async function queryDynamoDb() {
+  try{
+    let params = {
+      TableName: 'test-table',
+      IndexName: 'ProductCategory-Price-index',
+      KeyConditionExpression: 'ProductCategory = :c AND Price <= :p',
+      ExpressionAttributeValues: {
+        ':c' : { "S": "Bike" },
+        ':p' : { "N": "300" }
+      }
+    }
+    const queryResult = await ddb.query(params).promise();
+    console.log('Query Results:');
+    console.log(queryResult.Items)
+  }
+  catch(err) {
+    console.log(err, err.stack);
   }
 }
